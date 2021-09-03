@@ -1,18 +1,24 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# In[11]:
+
+
 import pandas as pd
 import numpy as np
 
 import  requests
 import json
+import re
 from bs4 import BeautifulSoup
 from selenium import webdriver
 
 
+# # 合併相同key
+
+# In[2]:
 
 
-#合併相同key
 def comb_dict(dictobj):
     
     newdict = {
@@ -23,13 +29,17 @@ def comb_dict(dictobj):
     return newdict
 
 
-#爬工作清單
+# # 爬工作清單
+
+# In[9]:
+
+
 def search_job():
     url = 'https://www.104.com.tw/jobs/search/?'
     headers = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36'
               }
     
-    r = requests.get(url , my_params, headers = headers)
+    r = requests.get(url , JobSearchParams, headers = headers)
     soup = BeautifulSoup(r.text,"html.parser")
     List = soup.findAll('a',{'class':'js-job-link'})
     
@@ -48,14 +58,16 @@ def search_job():
     return JobList
 
 
+# # 擷取完整工作內容
+
+# In[49]:
 
 
-#擷取完整工作內容
 def get_job_detail(job_link_id):
 
         url = f'https://www.104.com.tw/job/ajax/content/{job_link_id}'
 
-        headers = {'Referer': 'https://www.104.com.tw/job/{job_link_id},
+        headers = {'Referer': 'https://www.104.com.tw/job/{job_link_id}',
                    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36'
         }
         
@@ -70,45 +82,47 @@ def get_job_detail(job_link_id):
         for key in target['condition']:
             if type(target['condition'][key])==str:
                 continue
-                
-            elif key in point_key:
-                tras_dict = combdict(target['condition'][key])
-                target['condition'][key] = ','.join(tras_dict['description'])
-                
-            elif key =='acceptRole':
-                tras_dict = combdict(a['condition'][key]['role'])
-                target['condition'][key] = ','.join(tras_dict['description'])
-                
-            elif key == 'language':
-                fnlstr = ''
-                for i in a['condition']['language']:
-                    tmpstr = ':'.join(i.values())+';'
-                    fnlstr += tmpstr
-                    target['condition'][key] = fnlstr
-            else:
+            
+            elif not target['condition'][key]:
                 target['condition'][key] = ','.join(target['condition'][key])
+                
+            else:
+                if key in point_key:
+                    tras_dict = comb_dict(target['condition'][key])
+                    target['condition'][key] = ','.join(tras_dict['description'])
+                elif key =='acceptRole':
+                        tras_dict = comb_dict(target['condition'][key]['role'])
+                        target['condition'][key] = ','.join(tras_dict['description'])
+                elif key == 'language':
+                        fnlstr = ''
+                        for i in target['condition']['language']:
+                            tmpstr = ':'.join(i.values())+';'
+                            fnlstr += tmpstr
+                            target['condition'][key] = fnlstr
         
-        for key in a['jobDetail']:
-            if type(a['jobDetail'][key]) in (str,int) or a['jobDetail'][key] is None:
+        for key in target['jobDetail']:
+            if type(target['jobDetail'][key]) in (str,int) or target['jobDetail'][key] is None:
                 continue
                 
-            elif key in point_key:
-                tras_dict = comb_dict(a['jobDetail'][key])
-                a['jobDetail'][key] = ','.join(tras_dict['description'])
+            elif not target['jobDetail'][key]:
+                target['jobDetail'][key] = ','.join(target['jobDetail'][key])           
                 
             else:
-                a['jobDetail'][key] = ','.join(a['jobDetail'][key])
+                if key in point_key:
+                    tras_dict = comb_dict(target['jobDetail'][key])
+                    target['jobDetail'][key] = ','.join(tras_dict['description'])
         
         
-        contentALL = {**a['header'], **a['contact'], **a['condition'], **a['welfare'],
-                      **a['jobDetail'], **{'industry':a['industry']},
-                      **{'employees':a['employees']}, **{'chinaCorp':a['chinaCorp']}}
+        contentALL = {**target['header'], **target['contact'], **target['condition'], **target['welfare'],
+                      **target['jobDetail'], **{'industry':target['industry']},
+                      **{'employees':target['employees']}, **{'chinaCorp':target['chinaCorp']}}
         
-        JobListDetail = pd.DataFrame.from_dict(contentALL)
+        JobListDetail =pd.DataFrame.from_dict(contentALL,orient='index').T        
         
         return JobListDetail
 
 
+# In[50]:
 
 
 JobSearchParams = {'ro':'1', # 限定全職的工作，如果不限定則輸入0
@@ -116,12 +130,11 @@ JobSearchParams = {'ro':'1', # 限定全職的工作，如果不限定則輸入0
                   'area':'6001006000,6001001000,6001002000', 
                   'isnew':'30', # 只要最近一個月有更新的過的職缺
                   'mode':'l',
-                  'page'='1'} 
+                  'page':'1'} 
 
 
+# In[52]:
 
-
-JobList = search_job()
 
 JobListDetailAll = pd.DataFrame()
 
@@ -130,8 +143,8 @@ for index, row in JobList.iterrows():
     JobListDetailAll = JobListDetailAll.append(JobListDetail, ignore_index=True)
 
 
+# In[56]:
 
 
-
-
+JobListDetailAll.to_csv('JobListDetailAll.csv', index=False)
 
